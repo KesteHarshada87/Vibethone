@@ -95,7 +95,10 @@ const leaderboard = [
   { name: "You", xp: 0, badge: "", isMe: true },
 ];
 
-function NavBar({ active, setActive }) {
+const AUTH_USERS_KEY = "aiml_lab_users_v1";
+const AUTH_SESSION_KEY = "aiml_lab_session_v1";
+
+function NavBar({ active, setActive, user, onLogout }) {
   const navs = [
     { id: "home", label: "Home", icon: "🏠" },
     { id: "learn", label: "Learn", icon: "📚" },
@@ -114,7 +117,119 @@ function NavBar({ active, setActive }) {
           <span style={{ fontSize: 14 }}>{n.icon}</span>{n.label}
         </button>
       ))}
+      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, padding: "10px 0" }}>
+        <div style={{ color: palette.textSoft, fontSize: 12, background: `${palette.accent}14`, border: `1px solid ${palette.accent}33`, padding: "6px 10px", borderRadius: 999 }}>
+          {user?.name || "Learner"}
+        </div>
+        <button onClick={onLogout} style={{ background: `${palette.accent3}22`, border: `1px solid ${palette.accent3}55`, color: palette.accent3, padding: "8px 12px", cursor: "pointer", borderRadius: 8, fontSize: 12, fontWeight: 700 }}>
+          Logout
+        </button>
+      </div>
     </nav>
+  );
+}
+
+function AuthPage({ onAuthSuccess }) {
+  const [mode, setMode] = useState("login");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setError("");
+
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !password) {
+      setError("Email and password are required.");
+      return;
+    }
+
+    const users = JSON.parse(localStorage.getItem(AUTH_USERS_KEY) || "[]");
+
+    if (mode === "signup") {
+      if (!name.trim()) {
+        setError("Name is required for sign up.");
+        return;
+      }
+      if (password.length < 6) {
+        setError("Password must be at least 6 characters.");
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError("Passwords do not match.");
+        return;
+      }
+      if (users.some((u) => u.email === cleanEmail)) {
+        setError("Account already exists. Please login.");
+        return;
+      }
+
+      const newUser = { name: name.trim(), email: cleanEmail, password };
+      localStorage.setItem(AUTH_USERS_KEY, JSON.stringify([...users, newUser]));
+      localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({ name: newUser.name, email: newUser.email }));
+      onAuthSuccess({ name: newUser.name, email: newUser.email });
+      return;
+    }
+
+    const matched = users.find((u) => u.email === cleanEmail && u.password === password);
+    if (!matched) {
+      setError("Invalid credentials. Please sign up first.");
+      return;
+    }
+
+    localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({ name: matched.name, email: matched.email }));
+    onAuthSuccess({ name: matched.name, email: matched.email });
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ width: "100%", maxWidth: 980, display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 22 }}>
+        <div style={{ background: `linear-gradient(150deg, ${palette.card}, #10233b)`, border: `1px solid ${palette.border}`, borderRadius: 18, padding: "32px 30px", boxShadow: "0 16px 40px rgba(5, 10, 22, 0.5)" }}>
+          <div style={{ display: "inline-block", marginBottom: 14, background: `${palette.accent}22`, border: `1px solid ${palette.accent}44`, color: palette.accent, borderRadius: 999, padding: "4px 12px", fontSize: 11, fontWeight: 700, letterSpacing: 1.1 }}>
+            WELCOME TO AIML LAB
+          </div>
+          <h1 style={{ margin: "0 0 12px", color: palette.text, fontSize: 42, lineHeight: 1.12, letterSpacing: -1.2 }}>
+            Learn AI by
+            <span style={{ display: "block", background: `linear-gradient(90deg, ${palette.accent}, ${palette.accent2})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+              playing and building.
+            </span>
+          </h1>
+          <p style={{ margin: 0, color: palette.textSoft, lineHeight: 1.7, maxWidth: 520 }}>
+            Personalized modules, interactive games, and simulation-based understanding. Create your account to continue your learning journey.
+          </p>
+        </div>
+
+        <div style={{ background: palette.card, border: `1px solid ${palette.border}`, borderRadius: 16, padding: 24 }}>
+          <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
+            <button onClick={() => { setMode("login"); setError(""); }} style={{ flex: 1, borderRadius: 9, border: `1px solid ${mode === "login" ? palette.accent : palette.border}`, background: mode === "login" ? `${palette.accent}22` : "transparent", color: mode === "login" ? palette.accent : palette.textSoft, padding: "9px 0", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Login</button>
+            <button onClick={() => { setMode("signup"); setError(""); }} style={{ flex: 1, borderRadius: 9, border: `1px solid ${mode === "signup" ? palette.accent2 : palette.border}`, background: mode === "signup" ? `${palette.accent2}22` : "transparent", color: mode === "signup" ? palette.accent2 : palette.textSoft, padding: "9px 0", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Sign Up</button>
+          </div>
+
+          <form onSubmit={handleSubmit}>
+            {mode === "signup" && (
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" style={{ width: "100%", marginBottom: 10, background: palette.bg, border: `1px solid ${palette.border}`, borderRadius: 9, padding: "12px 12px", color: palette.text, fontSize: 14, outline: "none" }} />
+            )}
+            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="Email address" style={{ width: "100%", marginBottom: 10, background: palette.bg, border: `1px solid ${palette.border}`, borderRadius: 9, padding: "12px 12px", color: palette.text, fontSize: 14, outline: "none" }} />
+            <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Password" style={{ width: "100%", marginBottom: 10, background: palette.bg, border: `1px solid ${palette.border}`, borderRadius: 9, padding: "12px 12px", color: palette.text, fontSize: 14, outline: "none" }} />
+            {mode === "signup" && (
+              <input value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} type="password" placeholder="Confirm password" style={{ width: "100%", marginBottom: 10, background: palette.bg, border: `1px solid ${palette.border}`, borderRadius: 9, padding: "12px 12px", color: palette.text, fontSize: 14, outline: "none" }} />
+            )}
+
+            {error && <div style={{ marginBottom: 10, color: "#f87171", background: "#7f1d1d33", border: "1px solid #ef444466", borderRadius: 8, padding: "8px 10px", fontSize: 12 }}>{error}</div>}
+
+            <button type="submit" style={{ width: "100%", background: mode === "signup" ? palette.accent2 : palette.accent, border: "none", borderRadius: 10, padding: "12px 14px", color: mode === "signup" ? "#05221a" : "#fff", fontWeight: 800, cursor: "pointer", fontSize: 14 }}>
+              {mode === "signup" ? "Create Account" : "Login"}
+            </button>
+          </form>
+          <p style={{ margin: "12px 0 0", fontSize: 11, color: palette.muted }}>
+            Demo auth is stored in your browser localStorage.
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -858,19 +973,51 @@ export default function App() {
   const [completedModules, setCompletedModules] = useState([]);
   const [totalXp, setTotalXp] = useState(0);
   const [earnedBadges, setEarnedBadges] = useState([]);
+  const [authUser, setAuthUser] = useState(null);
+
+  useEffect(() => {
+    try {
+      const session = JSON.parse(localStorage.getItem(AUTH_SESSION_KEY) || "null");
+      if (session?.email) {
+        setAuthUser(session);
+      }
+    } catch {
+      setAuthUser(null);
+    }
+  }, []);
+
+  const handleAuthSuccess = (user) => {
+    setAuthUser(user);
+    setActive("home");
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem(AUTH_SESSION_KEY);
+    setAuthUser(null);
+    setActive("home");
+    setCompletedModules([]);
+    setTotalXp(0);
+    setEarnedBadges([]);
+  };
 
   return (
     <div style={{ background: `radial-gradient(circle at 15% -10%, #1f3f7b 0%, rgba(31, 63, 123, 0) 40%), radial-gradient(circle at 90% 10%, #154f62 0%, rgba(21, 79, 98, 0) 35%), ${palette.bg}`, minHeight: "100vh", fontFamily: "'Inter', system-ui, sans-serif", color: palette.text, position: "relative", overflowX: "hidden" }}>
       <div aria-hidden="true" style={{ position: "fixed", top: -120, left: -90, width: 320, height: 320, borderRadius: "50%", background: "radial-gradient(circle, rgba(79, 142, 247, 0.24), rgba(79, 142, 247, 0))", filter: "blur(8px)", pointerEvents: "none", zIndex: 0 }} />
       <div aria-hidden="true" style={{ position: "fixed", bottom: -140, right: -120, width: 380, height: 380, borderRadius: "50%", background: "radial-gradient(circle, rgba(34, 211, 165, 0.2), rgba(34, 211, 165, 0))", filter: "blur(12px)", pointerEvents: "none", zIndex: 0 }} />
       <div style={{ position: "relative", zIndex: 1 }}>
-        <NavBar active={active} setActive={setActive} />
-        {active === "home" && <HomePage setActive={setActive} completedModules={completedModules} totalXp={totalXp} />}
-        {active === "learn" && <LearnPage completedModules={completedModules} setCompletedModules={setCompletedModules} setTotalXp={setTotalXp} />}
-        {active === "quiz" && <QuizPage earnedBadges={earnedBadges} setEarnedBadges={setEarnedBadges} setTotalXp={setTotalXp} />}
-        {active === "game" && <GamePage earnedBadges={earnedBadges} setEarnedBadges={setEarnedBadges} setTotalXp={setTotalXp} />}
-        {active === "simulate" && <SimulatePage />}
-        {active === "dashboard" && <DashboardPage completedModules={completedModules} totalXp={totalXp} earnedBadges={earnedBadges} />}
+        {authUser ? (
+          <>
+            <NavBar active={active} setActive={setActive} user={authUser} onLogout={handleLogout} />
+            {active === "home" && <HomePage setActive={setActive} completedModules={completedModules} totalXp={totalXp} />}
+            {active === "learn" && <LearnPage completedModules={completedModules} setCompletedModules={setCompletedModules} setTotalXp={setTotalXp} />}
+            {active === "quiz" && <QuizPage earnedBadges={earnedBadges} setEarnedBadges={setEarnedBadges} setTotalXp={setTotalXp} />}
+            {active === "game" && <GamePage earnedBadges={earnedBadges} setEarnedBadges={setEarnedBadges} setTotalXp={setTotalXp} />}
+            {active === "simulate" && <SimulatePage />}
+            {active === "dashboard" && <DashboardPage completedModules={completedModules} totalXp={totalXp} earnedBadges={earnedBadges} />}
+          </>
+        ) : (
+          <AuthPage onAuthSuccess={handleAuthSuccess} />
+        )}
       </div>
     </div>
   );
