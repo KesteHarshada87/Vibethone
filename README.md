@@ -98,6 +98,9 @@ npm start
 App will run on:
 http://localhost:3000
 
+Deployment:
+https://tech-titans-m4n7.vercel.app?_vercel_share=yz4stdy6iHBp7lBaZ5jirgnDvmDcfo4k
+
 🎯 Project Goal
 
 This project was built to make AI/ML:
