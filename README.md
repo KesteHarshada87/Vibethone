@@ -1,4 +1,4 @@
-# Vibethone
+# Vibethon
 
 🧠 AIML Lab – Interactive AI Learning Platform
 
