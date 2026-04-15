@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const palette = {
   bg: "#0A0E1A",
@@ -97,11 +97,13 @@ const leaderboard = [
 
 const AUTH_USERS_KEY = "aiml_lab_users_v1";
 const AUTH_SESSION_KEY = "aiml_lab_session_v1";
+const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.27.3/full/pyodide.js";
 
 function NavBar({ active, setActive, user, onLogout }) {
   const navs = [
     { id: "home", label: "Home", icon: "🏠" },
     { id: "learn", label: "Learn", icon: "📚" },
+    { id: "code", label: "Code Lab", icon: "💻" },
     { id: "quiz", label: "Quiz", icon: "✏️" },
     { id: "game", label: "Mini-Game", icon: "🎮" },
     { id: "simulate", label: "Simulate", icon: "🔬" },
@@ -902,6 +904,201 @@ function SimulatePage() {
   );
 }
 
+function ProgrammingPracticePage() {
+  const [code, setCode] = useState(`# Write Python code here\nprint("Hello AIML Lab!")`);
+  const [pythonOutput, setPythonOutput] = useState("Python output will appear here.");
+  const [syntaxMessage, setSyntaxMessage] = useState("No syntax check run yet.");
+  const [runtimeState, setRuntimeState] = useState("loading");
+  const [isRunning, setIsRunning] = useState(false);
+  const pyodideRef = useRef(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadRuntime = async () => {
+      try {
+        if (window.__aimlPyodideRuntime) {
+          pyodideRef.current = window.__aimlPyodideRuntime;
+          if (mounted) setRuntimeState("ready");
+          return;
+        }
+
+        if (!window.loadPyodide) {
+          await new Promise((resolve, reject) => {
+            const existingScript = document.querySelector(`script[src="${PYODIDE_CDN}"]`);
+            if (existingScript) {
+              existingScript.addEventListener("load", resolve, { once: true });
+              existingScript.addEventListener("error", () => reject(new Error("Unable to load Pyodide script.")), { once: true });
+              return;
+            }
+
+            const script = document.createElement("script");
+            script.src = PYODIDE_CDN;
+            script.async = true;
+            script.onload = resolve;
+            script.onerror = () => reject(new Error("Unable to load Pyodide script."));
+            document.body.appendChild(script);
+          });
+        }
+
+        const pyodide = await window.loadPyodide();
+        window.__aimlPyodideRuntime = pyodide;
+        pyodideRef.current = pyodide;
+        if (mounted) setRuntimeState("ready");
+      } catch (err) {
+        if (mounted) {
+          setRuntimeState("error");
+          setPythonOutput(`Runtime error: ${err.message}`);
+        }
+      }
+    };
+
+    loadRuntime();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const checkSyntax = async () => {
+    if (!pyodideRef.current) {
+      setSyntaxMessage("Python runtime is not ready yet. Please wait a moment.");
+      return false;
+    }
+
+    try {
+      pyodideRef.current.globals.set("user_code", code);
+      const syntaxResult = await pyodideRef.current.runPythonAsync(`
+import ast
+import traceback
+try:
+    ast.parse(user_code)
+    syntax_result = "__SYNTAX_OK__"
+except Exception:
+    syntax_result = traceback.format_exc()
+syntax_result
+      `);
+
+      if (String(syntaxResult).trim() === "__SYNTAX_OK__") {
+        setSyntaxMessage("Syntax OK");
+        return true;
+      }
+
+      setSyntaxMessage(String(syntaxResult));
+      return false;
+    } catch (err) {
+      setSyntaxMessage(`Syntax check failed: ${err.message}`);
+      return false;
+    }
+  };
+
+  const runPythonCode = async () => {
+    if (!pyodideRef.current) {
+      setPythonOutput("Python runtime is not ready yet. Please wait a moment.");
+      return;
+    }
+
+    setIsRunning(true);
+    try {
+      const isSyntaxValid = await checkSyntax();
+      if (!isSyntaxValid) {
+        setPythonOutput("Execution skipped due to syntax error.");
+        return;
+      }
+
+      pyodideRef.current.globals.set("user_code", code);
+      const output = await pyodideRef.current.runPythonAsync(`
+import io
+import traceback
+from contextlib import redirect_stdout, redirect_stderr
+
+stdout_buffer = io.StringIO()
+stderr_buffer = io.StringIO()
+
+try:
+    with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
+        exec(user_code, {})
+except Exception:
+    traceback.print_exc(file=stderr_buffer)
+
+combined = stdout_buffer.getvalue()
+if stderr_buffer.getvalue():
+    if combined:
+        combined += "\\n"
+    combined += stderr_buffer.getvalue()
+
+combined if combined.strip() else "Program ran successfully with no output."
+      `);
+
+      setPythonOutput(String(output));
+    } catch (err) {
+      setPythonOutput(`Execution failed: ${err.message}`);
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  return (
+    <div style={{ padding: "32px", maxWidth: 980, margin: "0 auto" }}>
+      <h2 style={{ color: palette.text, margin: "0 0 8px", fontSize: 28, fontWeight: 800 }}>💻 Programming Practice</h2>
+      <p style={{ color: palette.textSoft, margin: "0 0 22px", fontSize: 15, lineHeight: 1.6 }}>
+        Write any Python code, validate syntax, run it, and view output instantly.
+      </p>
+      <div style={{ background: palette.card, border: `1px solid ${palette.border}`, borderRadius: 14, padding: 20 }}>
+        <textarea
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          rows={14}
+          style={{
+            width: "100%",
+            background: "#0a0f1d",
+            color: "#d2e5ff",
+            border: `1px solid ${palette.border}`,
+            borderRadius: 10,
+            padding: "12px 13px",
+            fontFamily: "Consolas, Menlo, monospace",
+            fontSize: 13,
+            lineHeight: 1.6,
+            outline: "none",
+            resize: "vertical",
+            boxSizing: "border-box",
+          }}
+        />
+
+        <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+          <button onClick={checkSyntax} disabled={runtimeState !== "ready"} style={{ background: runtimeState === "ready" ? palette.accent : palette.border, border: "none", color: runtimeState === "ready" ? "#fff" : palette.muted, padding: "10px 16px", borderRadius: 9, fontWeight: 700, cursor: runtimeState === "ready" ? "pointer" : "default" }}>
+            Check Syntax
+          </button>
+          <button onClick={runPythonCode} disabled={runtimeState !== "ready" || isRunning} style={{ background: runtimeState === "ready" ? palette.accent2 : palette.border, border: "none", color: runtimeState === "ready" ? "#05221a" : palette.muted, padding: "10px 16px", borderRadius: 9, fontWeight: 700, cursor: runtimeState === "ready" ? "pointer" : "default" }}>
+            {isRunning ? "Running..." : "Run Python"}
+          </button>
+          <button onClick={() => setPythonOutput("Output cleared.")} style={{ background: "transparent", border: `1px solid ${palette.border}`, color: palette.textSoft, padding: "10px 16px", borderRadius: 9, cursor: "pointer" }}>
+            Clear Output
+          </button>
+        </div>
+
+        <div style={{ marginTop: 12, background: "#111b2d", border: `1px solid ${palette.border}`, borderRadius: 10, padding: "10px 12px" }}>
+          <div style={{ color: palette.muted, fontSize: 11, fontWeight: 700, marginBottom: 4 }}>SYNTAX STATUS</div>
+          <pre style={{ margin: 0, color: syntaxMessage === "Syntax OK" ? palette.accent2 : "#fca5a5", fontSize: 12, lineHeight: 1.5, whiteSpace: "pre-wrap", fontFamily: "Consolas, Menlo, monospace" }}>
+            {syntaxMessage}
+          </pre>
+        </div>
+
+        <div style={{ marginTop: 12, background: "#0a0f1d", border: `1px solid ${palette.border}`, borderRadius: 10, padding: "10px 12px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <div style={{ color: palette.muted, fontSize: 11, fontWeight: 700 }}>PYTHON CONSOLE</div>
+            <div style={{ fontSize: 11, color: runtimeState === "ready" ? palette.accent2 : runtimeState === "error" ? "#f87171" : palette.muted }}>
+              {runtimeState === "ready" ? "Runtime ready" : runtimeState === "error" ? "Runtime failed" : "Loading runtime..."}
+            </div>
+          </div>
+          <pre style={{ margin: 0, color: "#c6dcff", fontSize: 12, lineHeight: 1.6, whiteSpace: "pre-wrap", minHeight: 90, fontFamily: "Consolas, Menlo, monospace" }}>
+            {pythonOutput}
+          </pre>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DashboardPage({ completedModules, totalXp, earnedBadges }) {
   const pct = Math.round((completedModules.length / modules.length) * 100);
   const lb = leaderboard.map(l => l.isMe ? { ...l, xp: totalXp } : l).sort((a, b) => b.xp - a.xp);
@@ -1010,6 +1207,7 @@ export default function App() {
             <NavBar active={active} setActive={setActive} user={authUser} onLogout={handleLogout} />
             {active === "home" && <HomePage setActive={setActive} completedModules={completedModules} totalXp={totalXp} />}
             {active === "learn" && <LearnPage completedModules={completedModules} setCompletedModules={setCompletedModules} setTotalXp={setTotalXp} />}
+            {active === "code" && <ProgrammingPracticePage />}
             {active === "quiz" && <QuizPage earnedBadges={earnedBadges} setEarnedBadges={setEarnedBadges} setTotalXp={setTotalXp} />}
             {active === "game" && <GamePage earnedBadges={earnedBadges} setEarnedBadges={setEarnedBadges} setTotalXp={setTotalXp} />}
             {active === "simulate" && <SimulatePage />}
